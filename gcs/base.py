@@ -1,5 +1,6 @@
 import pydot
 import numpy as np
+from pdb import set_trace as debug
 
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
@@ -15,7 +16,7 @@ from pydrake.solvers import (
 )
 from pydrake.all import le
 
-from gcs.rounding import MipPathExtraction
+from gcs.rounding import MipPathExtraction, randomForwardPathSearch
 
 def polytopeDimension(A, b, tol=1e-4):
     
@@ -290,7 +291,6 @@ class BaseGCS:
                 return best_path, best_result, results_dict
         elif rounding:
             self.options.max_rounded_paths = 10
-
             rounded_result = self.gcs.SolveShortestPath(self.source, self.target, self.options)
             best_path = MipPathExtraction(self.gcs, rounded_result, self.source, self.target)[0]
             best_result = rounded_result
@@ -310,3 +310,30 @@ class BaseGCS:
                 print("Added", edge.name(), "to path.")
 
         return best_path, best_result, results_dict
+
+    def solveSingleRandomGCS(self, preprocessing, verbose, seed):   
+        results_dict = {}
+        self.options.convex_relaxation = True
+        self.options.preprocessing = preprocessing
+        self.options.max_rounded_paths = 1
+        self.options.rounding_seed = seed
+
+        result = self.gcs.SolveShortestPath(self.source, self.target, self.options)
+        # path = randomForwardPathSearch(self.gcs, result, self.source, self.target, seed=seed)[0]
+        path = MipPathExtraction(self.gcs, result, self.source, self.target)[0]
+        
+        results_dict["relaxation_result"] = result
+        results_dict["relaxation_solver_time"] = result.get_solver_details().optimizer_time
+        results_dict["relaxation_cost"] = result.get_optimal_cost()
+
+        if verbose:
+            print("Solution\t",
+                  "Success:", result.get_solution_result(),
+                  "Cost:", result.get_optimal_cost(),
+                  "Solver time:", result.get_solver_details().optimizer_time)
+
+        if result.is_success():
+            return path, result, results_dict
+        else:
+            print("Solve failed")
+            return None, None, results_dict

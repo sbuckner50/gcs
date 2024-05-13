@@ -352,6 +352,44 @@ class BezierGCS(BaseGCS):
 
         return BezierTrajectory(path, time_traj), results_dict
 
+    def SolveSingleRandomPath(self, verbose=False, preprocessing=False, seed=0):
+        path, result, results_dict = self.solveSingleRandomGCS(
+            preprocessing, verbose, seed)
+
+        if path is None:
+            return None, results_dict
+
+        # Extract trajectory control points
+        knots = np.zeros(self.order + 1)
+        path_control_points = []
+        time_control_points = []
+        for edge in path:
+            if edge.v() == self.target:
+                knots = np.concatenate((knots, [knots[-1]]))
+                path_control_points.append(result.GetSolution(edge.xv()))
+                time_control_points.append(np.array([result.GetSolution(edge.xu())[-1]]))
+                break
+            edge_time = knots[-1] + 1.
+            knots = np.concatenate((knots, np.full(self.order, edge_time)))
+            edge_path_points = np.reshape(result.GetSolution(edge.xv())[:-(self.order + 1)],
+                                             (self.dimension, self.order + 1), "F")
+            edge_time_points = result.GetSolution(edge.xv())[-(self.order + 1):]
+            for ii in range(self.order):
+                path_control_points.append(edge_path_points[:, ii])
+                time_control_points.append(np.array([edge_time_points[ii]]))
+
+        offset = time_control_points[0].copy()
+        for ii in range(len(time_control_points)):
+            time_control_points[ii] -= offset
+
+        path_control_points = np.array(path_control_points).T
+        time_control_points = np.array(time_control_points).T
+
+        path = BsplineTrajectory(BsplineBasis(self.order + 1, knots), path_control_points)
+        time_traj = BsplineTrajectory(BsplineBasis(self.order + 1, knots), time_control_points)
+
+        return BezierTrajectory(path, time_traj), results_dict
+
 class BezierTrajectory:
     def __init__(self, path_traj, time_traj):
         assert path_traj.start_time() == time_traj.start_time()
