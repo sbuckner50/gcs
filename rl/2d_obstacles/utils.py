@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 import contextlib
 from pydrake.geometry.optimization import HPolyhedron
+from pydrake.common._module_py import RandomGenerator
+from pdb import set_trace as debug
+
+generator = RandomGenerator(0)
 
 @contextlib.contextmanager
 def temp_seed(seed):
@@ -12,10 +16,6 @@ def temp_seed(seed):
         yield
     finally:
         np.random.set_state(state)
-
-def make_hpolytope(V):
-    ch = ConvexHull(V)
-    return HPolyhedron(ch.equations[:, :-1], - ch.equations[:, -1])
 
 def setup_fig(x_min, x_max):
     plt.figure(figsize=(3, 3))
@@ -53,5 +53,6 @@ def plot_environment(obstacles, vertices):
     for k,V in enumerate(vertices):
         scale = scales[k]
         color = [scale, scale, scale]
-        color2 = [.5,.5,.5]
+        # color2 = [.5,.5,.5]
+        color2 = None
         plt.fill(*V.T, fc=color, ec=color2, zorder=3)

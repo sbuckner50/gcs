@@ -37,9 +37,8 @@ gcs.setSolver(MosekSolver())
 gcs.setPaperSolverOptions()
 gcs.addTimeCost(1)
 gcs.addVelocityLimits([qdot_min] * 2, [qdot_max] * 2)
-gcs.addSourceTarget(x_start, x_goal)
-if regularizer is not None:
-    gcs.addDerivativeRegularization(*regularizer, 2)
+gcs.addSourceTarget(x_start, x_goal, velocity=velocity)
+gcs.addDerivativeRegularization(*regularizer, 2)
 
 # == Solve SPP ==
 results = gcs.SolvePath(preprocessing=True, verbose=False)

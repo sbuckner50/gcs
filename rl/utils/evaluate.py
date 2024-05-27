@@ -4,7 +4,7 @@ DO NOT MODIFY BESIDES HYPERPARAMETERS
 import torch
 import numpy as np
 
-from policy_utils import rollout
+from policies import rollout
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

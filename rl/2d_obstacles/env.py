@@ -1,8 +1,12 @@
 import numpy as np
+import scipy.linalg as la
+import sys
+sys.path.append("../utils/")
+from gcs_utils import uniform_sample_ball
 from pdb import set_trace as debug
 
 class Obstacle2DEnv():
-    def __init__(self, init_conds, term_conds, dt) -> None:
+    def __init__(self, dt, pos_start_nom, pos_goal_nom, rad_start_pos, rad_goal_pos) -> None:
         self.dt = dt
         self.A = np.block([
             [np.zeros((2,2)), np.eye(2)],
@@ -17,17 +21,18 @@ class Obstacle2DEnv():
         self.cur_time = 0
         self.cur_obs = np.zeros((self.nx,1))
         self.dyn = lambda t,x,u : self.A @ x + self.B @ u # LTI double integrator dynamics
-        self.init_min = np.min(init_conds, axis=0)
-        self.init_max = np.max(init_conds, axis=0)
-        self.term_min = np.min(term_conds, axis=0)
-        self.term_max = np.max(term_conds, axis=0)
+        self.pos_start_nom = pos_start_nom
+        self.pos_goal_nom = pos_goal_nom
+        self.rad_start_pos = rad_start_pos
+        self.rad_goal_pos = rad_goal_pos
         
     def reset(self):
         """
         Sample initial condition and set that as the current observation
         """
-        init_obs = np.array([np.random.uniform(self.init_min[c], self.init_max[c]) for c in range(self.nx)]).reshape(-1,1)
-        self.cur_obs = init_obs
+        init_pos = uniform_sample_ball(self.pos_start_nom, self.rad_start_pos)
+        init_vel = np.zeros(2)
+        self.cur_obs = np.concatenate((init_pos,init_vel)).reshape(-1,1)
         return self.cur_obs
         
     def step(self, action):
@@ -56,12 +61,12 @@ class Obstacle2DEnv():
     def render(self):
         return 0 # TODO: make this some sort of animation if desired
     
-    def evaluate_done(self, obs):
+    def evaluate_done(self, obs, buffer=0.2):
         """
         Check if observation falls within the terminal condition boundaries
         """
-        obs_contained = [obs[c,0] >= self.term_min[c] and obs[c,0] <= self.term_max[c] for c in range(self.nx)]
-        done = all(obs_contained)
+        pos = obs[:2,]
+        done = la.norm(pos - self.pos_goal_nom) <= (1+buffer)*self.rad_goal_pos
         return done
         
     def evaluate_runaway_error(self, obs):
