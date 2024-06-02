@@ -9,12 +9,11 @@ import seaborn as sns
 from utils import *
 from models.env_2d import obstacles, vertices
 from pdb import set_trace as debug
-sys.path.append("../utils/")
 
-from policies import get_expert_data, PolicyGaussian, PolicyAutoRegressiveModel
-from imitation_learning import simulate_policy_bc
-from evaluate import evaluate
-from gcs_utils import *
+from rl_utils.policies import get_expert_data, PolicyGaussian, PolicyAutoRegressiveModel
+from rl_utils.imitation_learning import simulate_policy_bc
+from rl_utils.evaluate import evaluate
+from utils import *
 from env import Obstacle2DEnv
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -29,7 +28,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', action='store_true', default=False)
     parser.add_argument('--render',  action='store_true', default=False)
+    parser.add_argument('--specifier', type=str, default='')
     args = parser.parse_args()
+    if args.specifier != '':
+        args.specifier = ''+args.specifier
 
     # Get the expert data
     file_path = 'data/2d_obstacles_dataset.pkl'
@@ -50,7 +52,7 @@ if __name__ == "__main__":
     obs_size = flattened_expert['observations'][0].size
     ac_size = flattened_expert['actions'][0].size
     ac_margin = 0.1
-    policy_type = 'autoregressive'
+    policy_type = 'gaussian'
     if policy_type == 'gaussian':
         policy = PolicyGaussian(num_inputs=obs_size, num_outputs=ac_size, hidden_dim=hidden_dim, hidden_depth=hidden_depth)
     elif policy_type == 'autoregressive':
@@ -63,7 +65,7 @@ if __name__ == "__main__":
 
     # Define environment
     env = Obstacle2DEnv(expert_dataset["dt"], expert_dataset["pos_start_nom"], expert_dataset["pos_goal_nom"],
-                        expert_dataset["rad_start_pos"], expert_dataset["rad_goal_pos"])
+                        expert_dataset["rad_start_pos"], expert_dataset["rad_goal_pos"], expert_dataset["gcs_augment_degree"])
 
     # Training hyperparameters for BC
     episode_length = expert_dataset["max_episode_length"]
@@ -73,9 +75,9 @@ if __name__ == "__main__":
     # Train behavior cloning
     if not args.test:
         train_losses = simulate_policy_bc(policy, expert_data, num_epochs=num_epochs, episode_length=episode_length, batch_size=batch_size, chop_noise=True)
-        torch.save(policy.state_dict(), f'policies/2d_obstacle_policy.pth')
+        torch.save(policy.state_dict(), f'policies/policy'+args.specifier+'.pth')
     else:
-        policy.load_state_dict(torch.load(f'policies/2d_obstacle_policy.pth'))
+        policy.load_state_dict(torch.load(f'policies/policy'+args.specifier+'.pth'))
         
     # Test behavior cloning
     agent_name = 'bc'
@@ -89,8 +91,8 @@ if __name__ == "__main__":
     x_max = np.max(np.vstack(vertices), axis=0)
     vertices = augment_gcs_vertices(vertices, degree=expert_dataset["gcs_augment_degree"])
 
-    setup_fig(x_min, x_max)
-    plot_environment(obstacles, vertices)
+    setup_fig()
+    plot_environment(env)
     for run in range(num_validation_runs):
         alpha = .1 # 10./num_validation_runs
         positions_run = evaluation_paths[run]["observations"][:,:2]
@@ -98,7 +100,7 @@ if __name__ == "__main__":
         color = 'green' if successful_run else 'red'
         plt.plot(positions_run[:,0], positions_run[:,1], color, alpha=alpha, linewidth=1, zorder=5)
     if savefig:
-        plt.savefig('figures/policy_evaluation.pdf', bbox_inches='tight')
+        plt.savefig('figures/policy_evaluation'+args.specifier+'.pdf', bbox_inches='tight')
         
     # Loss plot
     sns.set_theme()
@@ -106,4 +108,4 @@ if __name__ == "__main__":
     plt.plot(range(num_epochs), train_losses, color='r', linewidth=2)
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.savefig("figures/loss.pdf")
+    plt.savefig('figures/loss_history'+args.specifier+'.pdf')

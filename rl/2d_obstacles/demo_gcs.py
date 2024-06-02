@@ -10,6 +10,7 @@ from pydrake.solvers import MosekSolver
 from gcs.bezier import BezierGCS
 from gcs.linear import LinearGCS
 from models.env_2d import obstacles, vertices
+from env import Obstacle2DEnv
 
 from utils import *
 
@@ -35,7 +36,8 @@ regions = [make_hpolytope(V) for V in vertices]
 gcs = BezierGCS(regions, order, continuity, hdot_min=hdot_min)
 gcs.setSolver(MosekSolver())
 gcs.setPaperSolverOptions()
-gcs.addTimeCost(1)
+gcs.addTimeCost(1e-3)
+gcs.addPathLengthCost(1)
 gcs.addVelocityLimits([qdot_min] * 2, [qdot_max] * 2)
 gcs.addSourceTarget(x_start, x_goal, velocity=velocity)
 gcs.addDerivativeRegularization(*regularizer, 2)
@@ -47,10 +49,9 @@ times = np.linspace(traj.start_time(), traj.end_time(), n_sim)
 positions = np.squeeze([traj.value(t) for t in times]).T
 
 # == Plotting ==
-x_min = np.min(np.vstack(vertices), axis=0)
-x_max = np.max(np.vstack(vertices), axis=0)
-setup_fig(x_min, x_max)
-plot_environment(obstacles, vertices)
+env = Obstacle2DEnv(0,0,0,0,0,0)
+setup_fig()
+plot_environment(env)
 plt.plot(*positions, 'b', zorder=5)
 if savefig:
     plt.savefig('figures/optimal_solution.pdf', bbox_inches='tight')

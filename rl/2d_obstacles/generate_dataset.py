@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pickle
 import scipy.linalg as la
 from scipy.spatial import ConvexHull
+import seaborn as sns
 from pdb import set_trace as debug
 import sys
 
@@ -11,11 +12,8 @@ from pydrake.solvers import MosekSolver
 
 from gcs.bezier import BezierGCS
 from gcs.linear import LinearGCS
-from models.env_2d import obstacles, vertices
-
+from models.env_2d import vertices
 from utils import *
-sys.path.append("../utils/")
-from gcs_utils import *
 
 # == Inputs ==
 x_start_nom = np.array([.2, .2])
@@ -28,9 +26,9 @@ regularizer = [1e-1, 1e-1]
 hdot_min = 1e-1
 qdot_min = -1
 qdot_max = 1
-dt_sim = .02
+dt_sim = 0.02
 pos_rad_sample = .2
-gcs_augment_degree = 1
+gcs_augment_degree = 0
 base_seed = 5
 np.random.seed(base_seed)
 
@@ -69,9 +67,10 @@ for ep in range(n_episodes):
     traj = results[0]
     n_sim = int(np.floor(traj.end_time() / dt_sim + 1))
     times = np.linspace(traj.start_time(), traj.end_time(), n_sim)
+    t_offset = lambda t : max(t+dt_sim/2,0)
     positions = np.squeeze([traj.value(t) for t in times]).T
     velocities = np.squeeze([traj.EvalDerivative(t, derivative_order=1) for t in times]).T
-    accels = np.squeeze([traj.EvalDerivative(t, derivative_order=2) for t in times]).T
+    accels = np.squeeze([traj.EvalDerivative(t_offset(t), derivative_order=2) for t in times]).T
     times_episodes.append(times)
     positions_episodes.append(positions)
     velocities_episodes.append(velocities)
@@ -86,8 +85,8 @@ for ep in range(n_episodes):
     episode = {}
     episode["observations"] = np.hstack((positions_episodes[ep].T, velocities_episodes[ep].T))
     episode["actions"] = accels_episodes[ep].T
-    episode["rewards"] = np.zeros((n_sim,1))
-    episode["dones"] = np.vstack((np.zeros((n_sim-1,1)), np.ones((1,1))))
+    episode["rewards"] = np.zeros(n_sim)
+    episode["dones"] = np.concatenate((np.zeros(n_sim-1), np.ones(1)))
     dataset["data"].append(episode)
 
 dataset["dt"] = dt_sim
@@ -102,15 +101,10 @@ filehandler = open("data/2d_obstacles_dataset.pkl", "wb")
 pickle.dump(dataset, filehandler)
 filehandler.close()
 
-# == Plotting ==
-x_min = np.min(np.vstack(vertices), axis=0)
-x_max = np.max(np.vstack(vertices), axis=0)
-setup_fig(x_min, x_max)
-plot_environment(obstacles, vertices)
-for ep in range(n_episodes):
-    alpha = 1/n_episodes
-    plt.scatter(x_starts[ep][0], x_starts[ep][1], 2, alpha=0.3, color='b', zorder=5, linewidth=0)
-    plt.scatter(x_goals[ep][0], x_goals[ep][1], 2, alpha=0.3, color='b', zorder=5, linewidth=0)
-    plt.plot(*positions_episodes[ep], 'b', alpha=alpha, linewidth=1, zorder=5)
-if savefig:
-    plt.savefig('figures/dataset.pdf', bbox_inches='tight')
+# == Plot control curve comparison for last episode ==
+accels_truth = np.squeeze([traj.EvalDerivative(t, derivative_order=2) for t in times]).T
+sns.set_theme()
+plt.figure(figsize=(3, 3))
+plt.plot(times, accels_truth[0,:], linewidth=0.3)
+plt.step(times, accels[0,:], linewidth=0.3)
+plt.savefig('figures/control_comparison.pdf', bbox_inches='tight')
